@@ -391,7 +391,7 @@ bool lightkv_next(lightkv_iter *iter, char **key, char **val, uint32_t *len) {
 
         if (iter->store->has_scanned == false) {
             iter->store->end_loc = iter->current;
-            iter->store->end_loc.l.offset + rsize - 1;
+            iter->store->end_loc.l.offset += rsize - 1;
         }
 
         iter->current.l.offset += rsize;
