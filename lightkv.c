@@ -127,6 +127,25 @@ loc create_nextloc(lightkv *kv, uint32_t size) {
             assert(false);
         }
         free(f);
+        // Put this space to freelist
+        uint32_t remaining = MAX_FILESIZE - kv->end_loc.l.offset;
+        if (remaining >= RECORD_HEADER_SIZE) {
+            loc rm;
+            rm.l.num = kv->end_loc.l.num;
+            rm.l.offset = kv->end_loc.l.offset + 1;
+            rm.l.sclass = get_sizeslot(remaining);
+            // cannot find a suitable bucket
+            // Place an end pointer
+            if (get_slotsize(rm.l.sclass) > remaining) {
+                record_header rh;
+                rh.type = RECODE_END;
+                rh.len = remaining;
+                write_record(kv, rm, (record *) &rh);
+            } else {
+                lightkv_delete(kv, rm.val);
+            }
+
+        }
     } else {
        next.l.offset++;
     }
