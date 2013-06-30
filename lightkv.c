@@ -18,9 +18,10 @@ void print_record(record *rec) {
     strncpy(val, (char *) rec + RECORD_HEADER_SIZE + rec->extlen, sizeof(val));
 
     printf("Record:\n");
-    printf("Type:%d\nSize:%d\nKey:%s\nValue:%s\n",
+    printf("Type:%d\nSize:%d\nKeylen:%d\nKey:%s\nValue:%s\n",
             rec->type,
             rec->len,
+            rec->extlen,
             key,
             val);
 }
@@ -199,7 +200,9 @@ static int read_record(lightkv *kv, loc l, record **rec) {
     *rec = malloc(slotsize);
     src = kv->filemaps[l.l.num] + l.l.offset;
     memcpy(*rec, src, slotsize);
-
+    printf("slotsize :%d\n", slotsize);
+    print_buf((*rec), slotsize);
+    print_buf(src, slotsize);
     printf("Read the following record\n");
     print_record(*rec);
 
@@ -236,39 +239,58 @@ int lightkv_init(lightkv **kv, char *base, bool prealloc) {
     return 0;
 }
 
-uint64_t lightkv_insert(lightkv *kv, char *key, char *val, uint32_t len) {
-    size_t size, keylen;
-    freeloc *f;
-    loc diskloc;
-    record *rec;
-    keylen = strlen(key);
-    size = RECORD_HEADER_SIZE + keylen + len;
+// Create a VAL or DEL record. Pass recsize = 0 for VAL record.
+static record *create_record(uint8_t type, char *key, char *val, size_t len, size_t recsize) {
+    record *rec = NULL;
 
-    rec = malloc(size);
-    rec->type = RECORD_VAL ;
-    rec->len = size;
-    rec->extlen = keylen;
+    if (type == RECORD_VAL) {
+        int keylen = strlen(key);
+        recsize = RECORD_HEADER_SIZE + keylen + len;
+        rec = calloc(recsize, 1);
+        rec->type = type;
+        rec->len = recsize;
+        rec->extlen = keylen;
+        memcpy((char *) rec + RECORD_HEADER_SIZE, key, keylen);
+        memcpy((char *) rec + RECORD_HEADER_SIZE + keylen, val, len);
+    } else if (type == RECORD_DEL) {
+        rec = calloc(recsize, 1);
+        rec->type = type;
+        rec->len = recsize;
+    }
 
-    memcpy((char *) rec + RECORD_HEADER_SIZE, key, keylen);
-    memcpy((char *) rec + RECORD_HEADER_SIZE + keylen, val, len);
+    return rec;
+}
 
-    printf("key:%s val:%s, rec:%s\n", key, val, rec);
-    print_buf(rec, size);
-    printf("len:%d, extlen=%d\n", size, keylen);
+static loc find_freeloc(lightkv *kv, size_t size) {
 
-    int rsize = roundsize(size);
-    int slot = get_sizeslot(rsize);
-    f = freelist_get(kv->freelist[slot], size);
+    loc l;
+    int slot = get_sizeslot(size);
+
+    freeloc *f = freelist_get(kv->freelist[slot], size);
     if (f) {
-        diskloc = f->l;
+        l = f->l;
         kv->freelist[slot] = freelist_remove(kv->freelist[slot], f);
     } else {
-        diskloc = create_nextloc(kv, rsize);
+        l = create_nextloc(kv, size);
+        kv->end_loc.l.num = l.l.num;
+        kv->end_loc.l.offset = l.l.offset + size - 1;
+        printf("\n added size, %d - end_loc - %d:%d\n\n", size, kv->end_loc.l.num, kv->end_loc.l.offset);
     }
-    diskloc.l.sclass = slot;
+    l.l.sclass = slot;
+    printf("requested slot %d\n", l.l.sclass);
+
+    return l;
+}
+
+uint64_t lightkv_insert(lightkv *kv, char *key, char *val, uint32_t len) {
+    size_t size, keylen;
+    loc diskloc;
+
+    record *rec = create_record(RECORD_VAL, key, val, len, 0);
+    int rsize = roundsize(rec->len);
+    printf("rounded size:%d\n", rsize);
+    diskloc = find_freeloc(kv, rsize);
     int l = write_record(kv, diskloc, rec);
-    kv->end_loc.l.num = diskloc.l.num;
-    kv->end_loc.l.offset = diskloc.l.offset + l - 1;
 
     return diskloc.val;
 }
@@ -309,10 +331,7 @@ bool lightkv_delete(lightkv *kv, uint64_t recid) {
     // TODO: basic sanity
     loc l = (loc) recid;
     size_t slotsize = get_slotsize(l.l.sclass);
-    record *rec = malloc(slotsize);
-    rec->type = RECORD_DEL;
-    rec->len = 0;
-    rec->extlen = 0;
+    record *rec = create_record(RECORD_DEL, NULL, NULL, 0, slotsize);
     write_record(kv, l, rec);
     freeloc *f = freeloc_new(l);
     kv->freelist[l.l.sclass] = freelist_add(kv->freelist[l.l.sclass], f);
@@ -321,7 +340,19 @@ bool lightkv_delete(lightkv *kv, uint64_t recid) {
 }
 
 uint64_t lightkv_update(lightkv *kv, uint64_t recid, char *key, char *val, uint32_t len) {
+    loc l = (loc) recid;
+    size_t slotsize = get_slotsize(l.l.sclass);
+    record *rec = create_record(RECORD_VAL, key, val, len, 0);
 
+    // We need to find a new slot
+    if (rec->len > slotsize) {
+        lightkv_delete(kv, recid);
+        int rsize = roundsize(rec->len);
+        l = find_freeloc(kv, rsize);
+    }
+
+    write_record(kv, l, rec);
+    return l.val;
 }
 
 main() {
@@ -340,7 +371,14 @@ main() {
     printf("record is %llu\n", rid);
     char *k,*v;
     int l;
-    lightkv_get(kv, 4295098368, &k, &v, &l);
-
+    lightkv_get(kv, rid, &k, &v, &l);
     printf("got record, key:%s, val:%s\n", k, v);
+
+    printf("updating record at rid %llu\n", rid);
+    rid = lightkv_update(kv, rid, "test_upd", "updat", 5);
+    printf("updated at loc %llu\n", rid);
+    rid = lightkv_update(kv, rid, "test_update-large", "1234567890", 10);
+    printf("updated at loc %llu\n", rid);
+
+
 }
