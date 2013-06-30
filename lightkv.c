@@ -154,6 +154,13 @@ int read_record(lightkv *kv, loc l, record **rec) {
     return 0;
 }
 
+record_header read_recheader(lightkv *kv, loc l) {
+    record_header rh;
+    char *src = kv->filemaps[l.l.num] + l.l.offset;
+    memcpy((char *) &rh, src, sizeof(rh));
+    return rh;
+}
+
 int lightkv_init(lightkv **kv, char *base, bool prealloc) {
     // TODO: Add sanity checks
 
@@ -166,11 +173,37 @@ int lightkv_init(lightkv **kv, char *base, bool prealloc) {
     (*kv)->nfiles = 1;
 
     char *f = getfilepath(base, 0);
-    alloc_file(f, MAX_FILESIZE);
+    if (access(f, F_OK ) != -1) {
+        int num = 0;
+        char *fn;
+        (*kv)->has_scanned = false;
 
-    if (map_file(&(*kv)->filemaps[0], f) < 0) {
-        assert(false);
+        while (1) {
+            fn = getfilepath(base, num);
+            if (access(fn, F_OK|R_OK|W_OK) != -1) {
+                if (map_file(&(*kv)->filemaps[num], fn) < 0) {
+                    assert(false);
+                }
+                num++;
+                (*kv)->nfiles = num;
+                free(fn);
+            } else {
+                free(fn);
+                break;
+            }
+        }
+    } else {
+        (*kv)->has_scanned = true;
+        alloc_file(f, MAX_FILESIZE);
+
+        if (map_file(&(*kv)->filemaps[0], f) < 0) {
+            assert(false);
+        }
     }
+
+    free(f);
+
+    // FIXME: fix loc pointers
     loc x;
     x.l.num = 0;
     x.l.offset = 0;
@@ -178,8 +211,6 @@ int lightkv_init(lightkv **kv, char *base, bool prealloc) {
     (*kv)->end_loc = x;
     x.l.offset = 1;
     (*kv)->start_loc = x;
-
-    free(f);
 
     return 0;
 }

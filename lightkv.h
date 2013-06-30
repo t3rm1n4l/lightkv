@@ -13,8 +13,19 @@
 
 #define RECORD_HEADER_SIZE 8
 
-#define RECORD_VAL 1
-#define RECORD_DEL 2
+#define RECORD_NULL 0
+#define RECORD_VAL  1
+#define RECORD_DEL  2
+#define RECODE_END  3
+
+// Record header
+// TODO: Avoid duplicates
+typedef struct __attribute__((__packed__)) {
+    uint8_t     type; // type of record
+    uint8_t     extlen; // extra length - key size
+    uint16_t    seqno; // future journaling stuff
+    uint32_t    len;  // total size of record
+} record_header;
 
 // Data record
 typedef struct __attribute__((__packed__)) {
@@ -77,6 +88,9 @@ int write_record(lightkv *kv, loc l, record *rec);
 // Read record from a location
 int read_record(lightkv *kv, loc l, record **rec);
 
+// Read record header from a location
+record_header read_recheader(lightkv *kv, loc l);
+
 // Create a record
 record *create_record(uint8_t type, char *key, char *val, size_t len, size_t recsize);
 
@@ -109,7 +123,7 @@ bool lightkv_get(lightkv *kv, uint64_t recid, char **key, char **val, uint32_t *
 // Lightkv iterator object
 typedef struct {
     lightkv *store;
-    loc     *current;
+    loc     current;
 } lightkv_iter;
 
 // Scan whole db
