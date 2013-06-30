@@ -7,9 +7,25 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
+#include <math.h>
 
 
-static uint32_t get_sizeslot(uint32_t v) {
+void print_record(record *rec) {
+    char key[rec->extlen+1];
+    char val[rec->len - rec->extlen - RECORD_HEADER_SIZE];
+    strncpy(key, (char *) rec + RECORD_HEADER_SIZE, rec->extlen);
+    key[rec->extlen] = '\0';
+    strncpy(val, (char *) rec + RECORD_HEADER_SIZE + rec->extlen, sizeof(val));
+
+    printf("Record:\n");
+    printf("Type:%d\nSize:%d\nKey:%s\nValue:%s\n",
+            rec->type,
+            rec->len,
+            key,
+            val);
+}
+
+static uint32_t roundsize(uint32_t v) {
     uint32_t n;
     // TODO: Add bound checks
     v--;
@@ -19,9 +35,25 @@ static uint32_t get_sizeslot(uint32_t v) {
     v |= v >> 8;
     v |= v >> 16;
     v++;
+    return v;
+}
 
+static int get_sizeslot(uint32_t v) {
+    int n = 0;
     while( v>>=1 ) n++;
+    n = n - FIRST_SIZECLASS;
+    if (n < 0) {
+        n = 0;
+    } else if (n > FIRST_SIZECLASS + MAX_SIZES - 1) {
+        n = MAX_SIZES - 1;
+    }
+
     return n;
+}
+
+static uint32_t get_slotsize(int slot) {
+    slot += FIRST_SIZECLASS;
+    return pow(2, slot);
 }
 
 static freeloc *freeloc_new(record *r) {
@@ -121,15 +153,55 @@ static int map_file(void **map, char *filepath) {
 }
 
 
-/*
 static loc create_nextloc(lightkv *kv, uint32_t size) {
-   if ((kv->end_loc).offset + size + 2 > MAX_FILESIZE) {
+    loc next = kv->end_loc;
+    next.l.sclass = 0;
+    uint64_t off = kv->end_loc.l.offset + size + 2;
+    if (off > MAX_FILESIZE) {
+        // FIXME: in prealloc, its different.
 
-   }
+        next.l.num++;
+        next.l.offset = 1;
+        kv->nfiles++;
 
+        char *f = getfilepath(kv->basepath, next.l.num);
+        alloc_file(f, MAX_FILESIZE);
+
+        if (map_file(&kv->filemaps[next.l.num], f) < 0) {
+            assert(false);
+        }
+        free(f);
+    } else {
+       next.l.offset++;
+    }
+
+    return next;
 }
-*/
 
+static int write_record(lightkv *kv, loc l, record *rec) {
+    char *dst;
+
+    dst = kv->filemaps[l.l.num] + l.l.offset;
+    memcpy(dst, rec, rec->len);
+
+    printf("Wrote: %s\n", rec);
+    printf("Wrote record at file, %d:%d\n", l.l.num, l.l.offset);
+    printf("type: %d, extlen: %d, size: %d\n", rec->type, rec->extlen, rec->len);
+    return rec->len;
+}
+
+static int read_record(lightkv *kv, loc l, record **rec) {
+    char *src;
+    size_t slotsize = get_slotsize(l.l.sclass);
+    *rec = malloc(slotsize);
+    src = kv->filemaps[l.l.num] + l.l.offset;
+    memcpy(*rec, src, slotsize);
+
+    printf("Read the following record\n");
+    print_record(*rec);
+
+    return 0;
+}
 
 int lightkv_init(lightkv **kv, char *base, bool prealloc) {
     // TODO: Add sanity checks
@@ -148,6 +220,13 @@ int lightkv_init(lightkv **kv, char *base, bool prealloc) {
     if (map_file(&(*kv)->filemaps[0], f) < 0) {
         assert(false);
     }
+    loc x;
+    x.l.num = 0;
+    x.l.offset = 0;
+
+    (*kv)->end_loc = x;
+    x.l.offset = 1;
+    (*kv)->start_loc = x;
 
     free(f);
 
@@ -166,19 +245,79 @@ uint64_t lightkv_insert(lightkv *kv, char *key, char *val, uint32_t len) {
     rec->type = RECORD_VAL ;
     rec->len = size;
     rec->extlen = keylen;
-    int slot = get_sizeslot(size);
+
+    memcpy((char *) rec + RECORD_HEADER_SIZE, key, keylen);
+    memcpy((char *) rec + RECORD_HEADER_SIZE + keylen, val, len);
+
+    printf("key:%s val:%s, rec:%s\n", key, val, rec);
+    print_buf(rec, size);
+    printf("len:%d, extlen=%d\n", size, keylen);
+
+    int rsize = roundsize(size);
+    int slot = get_sizeslot(rsize);
     f = freelist_get(kv->freelist[slot], size);
     if (f) {
         diskloc = f->l;
         kv->freelist[slot] = freelist_remove(kv->freelist[slot], f);
     } else {
-        ;
-//        diskloc = create_nextloc(kv, kv->end_loc);
+        diskloc = create_nextloc(kv, rsize);
+    }
+    diskloc.l.sclass = slot;
+    int l = write_record(kv, diskloc, rec);
+    kv->end_loc.l.num = diskloc.l.num;
+    kv->end_loc.l.offset = diskloc.l.offset + l - 1;
+
+    return diskloc.val;
+}
+
+char *get_key(record *r) {
+    int l = r->extlen;
+    char *buf = malloc(l+1);
+    memcpy(buf, (char *) r + RECORD_HEADER_SIZE, l);
+    buf[l] = '\0';
+    return buf;
+}
+
+size_t get_val(record *r, char **v) {
+    int l = r->len - RECORD_HEADER_SIZE - r->extlen;
+    char *buf = malloc(l);
+    memcpy(buf, (char *) r + RECORD_HEADER_SIZE + r->extlen, l);
+    *v = buf;
+    return l;
+}
+
+bool lightkv_get(lightkv *kv, uint64_t recid, char **key, char **val, uint32_t *len) {
+    bool rv;
+    record *rec;
+    loc l = (loc) recid;
+    read_record(kv, l, &rec);
+    rv = rec->type == RECORD_VAL ? true: false;
+    if (rv == false) {
+        return false;
     }
 
+    *key = get_key(rec);
+    *len = get_val(rec, val);
+
+    return true;
 }
 
 main() {
     lightkv *kv;
     lightkv_init(&kv, "/tmp/", true);
+    uint64_t rid;
+
+    rid = lightkv_insert(kv, "test_key1", "hello", 5);
+    printf("record is %llu\n", rid);
+
+    rid = lightkv_insert(kv, "test_key2", "helli", 5);
+    printf("record is %llu\n", rid);
+
+    rid = lightkv_insert(kv, "test_key3333", "hell3", 5);
+    printf("record is %llu\n", rid);
+    char *k,*v;
+    int l;
+    lightkv_get(kv, 4295098368, &k, &v, &l);
+
+    printf("got record, key:%s, val:%s\n", k, v);
 }

@@ -8,7 +8,7 @@
 #define DATAFILE_FORMATSTR  "data.%d.db"
 
 char *joinpath(char *base, char *next) {
-    int l1,l2;
+    size_t l1,l2;
     char *s;
     l1 = strlen(base);
     l2 = strlen(next);
@@ -31,6 +31,15 @@ char *getfilepath(char *base, int n) {
     // TODO: Fail checks
     snprintf(name, 200, DATAFILE_FORMATSTR, n);
     return joinpath(base, name);
+}
+
+void print_buf(char *buf, int len) {
+    int i;
+    printf("%p: ", buf);
+    for (i=0; i < len; i++) {
+        printf("%c", buf[i]);
+    }
+    printf("\n");
 }
 
 #endif

@@ -1,7 +1,6 @@
 #ifndef LIGHTKV_H
 #define LIGHTKV_H 1
 
-#include <sys/types.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -20,20 +19,20 @@
 #define RECORD_DEL 2
 
 // Data record
-typedef struct {
+typedef struct __attribute__((__packed__)) {
     uint8_t     type; // type of record
-    uint32_t    len;  // total size of record
-    uint16_t    seqno; // future journaling stuff
     uint8_t     extlen; // extra length - key size
-    char        data[]; // data
+    uint16_t    seqno; // future journaling stuff
+    uint32_t    len;  // total size of record
+    char        data[0]; // data
 } record;
 
 // Location
 typedef union {
-    struct {
+    struct __attribute__((__packed__)) {
         uint16_t num; // File number
-        uint32_t offset; // Offset within file
         uint16_t sclass; // Size class
+        uint32_t offset; // Offset within file
     } l;
     uint64_t val; // Represent as record id
 } loc;
@@ -47,7 +46,9 @@ typedef struct _freeloc {
 } freeloc;
 
 // Helper methods to operate on free list
-static uint16_t get_sizeslot(uint32_t v) {
+static uint32_t roundsize(uint32_t v);
+
+static int get_sizeslot(uint32_t v);
 
 static freeloc *freeloc_new(record *r);
 
