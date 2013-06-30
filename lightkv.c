@@ -342,21 +342,105 @@ uint64_t lightkv_update(lightkv *kv, uint64_t recid, char *key, char *val, uint3
     return l.val;
 }
 
+lightkv_iter *lightkv_iterator(lightkv *kv) {
+    lightkv_iter *iter = malloc(sizeof(lightkv_iter));
+    iter->store = kv;
+    iter->current = kv->start_loc;
+    return iter;
+}
+
+bool lightkv_next(lightkv_iter *iter, char **key, char **val, uint32_t *len) {
+    record *rec;
+    bool rv, cont = true;
+
+    while (cont) {
+        cont = false;
+        if (iter->current.l.offset + sizeof(record_header) >= MAX_FILESIZE) {
+            if (iter->current.l.num + 1 < iter->store->nfiles) {
+                iter->current.l.num++;
+                iter->current.l.offset = 1;
+            } else {
+                debug_log("reached nfile limit %d", iter->store->nfiles);
+                return false;
+            }
+        }
+
+        record_header rh = read_recheader(iter->store, iter->current);
+        size_t rsize = roundsize(rh.len);
+        iter->current.l.sclass = get_sizeslot(rsize);
+
+        if (rh.type == RECORD_NULL) {
+            debug_log("current limit =  %d loc "LOCSTR, iter->store->nfiles, LOCPARAMS(iter->current));
+            iter->store->has_scanned = true;
+            rv = false;
+        } else if (rh.type == RECODE_END) {
+            cont = true;
+        } else if (rh.type == RECORD_VAL) {
+            read_record(iter->store, iter->current, &rec);
+            *key = get_key(rec);
+            *len = get_val(rec, val);
+            free(rec);
+            rv = true;
+
+        } else if (rh.type == RECORD_DEL) {
+            if (iter->store->has_scanned == false) {
+                freeloc *f = freeloc_new(iter->current);
+                iter->store->freelist[iter->current.l.sclass] = freelist_add(iter->store->freelist[iter->current.l.sclass], f);
+            }
+            cont = true;
+        }
+
+        if (iter->store->has_scanned == false) {
+            iter->store->end_loc = iter->current;
+            iter->store->end_loc.l.offset + rsize - 1;
+        }
+
+        iter->current.l.offset += rsize;
+
+        if (cont) continue;
+
+        return rv;
+    }
+
+    return false;
+}
+
 main() {
     lightkv *kv;
     lightkv_init(&kv, "/tmp/", true);
     uint64_t rid;
+    char *k,*v;
+    int l;
 
+    /*
     rid = lightkv_insert(kv, "test_key1", "hello", 5);
 
     rid = lightkv_insert(kv, "test_key2", "helli", 5);
     lightkv_delete(kv, rid);
 
-    rid = lightkv_insert(kv, "test_key3333", "hell3", 5);
-    char *k,*v;
-    int l;
+
+
     lightkv_get(kv, rid, &k, &v, &l);
 
     rid = lightkv_update(kv, rid, "test_upd", "updat", 5);
     rid = lightkv_update(kv, rid, "test_update-large", "1234567890", 10);
+    */
+
+    int i;
+    for (i=0; i < 5000; i++) {
+        char *st = calloc(10,1);
+        sprintf(st, "key_%d", i);
+
+        rid = lightkv_insert(kv, st, "hell3", 5);
+    }
+    debug_log("Iterating..." ,"");
+    lightkv_iter *it = lightkv_iterator(kv);
+
+    i = 0;
+    while (lightkv_next(it, &k, &v, &l)) {
+        i++;
+        debug_log("iter, got %s, %s, %d", k, v, l);
+    }
+    debug_log("read %d items", i);
+
 }
