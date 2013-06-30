@@ -56,11 +56,11 @@ static uint32_t get_slotsize(int slot) {
     return pow(2, slot);
 }
 
-static freeloc *freeloc_new(record *r) {
-    freeloc *l = malloc(sizeof(freeloc));
-    l->size = r->len;
-    l->next = NULL;
-    l->prev = NULL;
+static freeloc *freeloc_new(loc l) {
+    freeloc *f = malloc(sizeof(freeloc));
+    f->l = l;
+    f->next = NULL;
+    f->prev = NULL;
 }
 
 static freeloc *freelist_add(freeloc *head, freeloc *n) {
@@ -79,15 +79,16 @@ static freeloc *freelist_get(freeloc *head, uint32_t size) {
     while (head) {
         if (f == NULL) {
             f = head;
-            diff = head->size - size;
+            diff = get_slotsize(head->l.l.sclass) - size;
         } else {
             uint32_t t;
-            t = head->size - size;
+            t = get_slotsize(head->l.l.sclass) - size;
             if (t < diff) {
                 diff = t;
                 f = head;
             }
         }
+        head = head->next;
     }
 
     return f;
@@ -96,7 +97,9 @@ static freeloc *freelist_get(freeloc *head, uint32_t size) {
 static freeloc *freelist_remove(freeloc *head, freeloc *f) {
     if (f) {
         if (f == head) {
-            f->next->prev = NULL;
+            if (f->next) {
+                f->next->prev = NULL;
+            }
             head = f;
         } else {
             freeloc *tmp;
@@ -302,6 +305,25 @@ bool lightkv_get(lightkv *kv, uint64_t recid, char **key, char **val, uint32_t *
     return true;
 }
 
+bool lightkv_delete(lightkv *kv, uint64_t recid) {
+    // TODO: basic sanity
+    loc l = (loc) recid;
+    size_t slotsize = get_slotsize(l.l.sclass);
+    record *rec = malloc(slotsize);
+    rec->type = RECORD_DEL;
+    rec->len = 0;
+    rec->extlen = 0;
+    write_record(kv, l, rec);
+    freeloc *f = freeloc_new(l);
+    kv->freelist[l.l.sclass] = freelist_add(kv->freelist[l.l.sclass], f);
+    free(rec);
+    return true;
+}
+
+uint64_t lightkv_update(lightkv *kv, uint64_t recid, char *key, char *val, uint32_t len) {
+
+}
+
 main() {
     lightkv *kv;
     lightkv_init(&kv, "/tmp/", true);
@@ -312,6 +334,7 @@ main() {
 
     rid = lightkv_insert(kv, "test_key2", "helli", 5);
     printf("record is %llu\n", rid);
+    lightkv_delete(kv, rid);
 
     rid = lightkv_insert(kv, "test_key3333", "hell3", 5);
     printf("record is %llu\n", rid);

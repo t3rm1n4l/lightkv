@@ -40,7 +40,6 @@ typedef union {
 // Data struct to keep size list belonging to a class
 // TODO: Replace with a rbtree to ensure O(logn) and improve fragmentation
 typedef struct _freeloc {
-    uint32_t size;
     loc l;
     struct _freeloc *prev, *next;
 } freeloc;
@@ -50,7 +49,7 @@ static uint32_t roundsize(uint32_t v);
 
 static int get_sizeslot(uint32_t v);
 
-static freeloc *freeloc_new(record *r);
+static freeloc *freeloc_new(loc l);
 
 static freeloc *freelist_add(freeloc *head, freeloc *n);
 
