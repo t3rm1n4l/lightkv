@@ -1,18 +1,31 @@
 #ifndef LIGHTKV_H
 #define LIGHTKV_H 1
 
-#define MAX_NFILES    50
-#define MAX_SIZES     20
-#define FIRST_SIZE    (1 << 3)
-#define MAX_RECORD_SIZE (1 << 5)
+#include <sys/types.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "helper.h"
+#include "errors.h"
+
+#define MAX_NFILES       50
+#define MAX_SIZES        20
+#define FIRST_SIZECLASS  3
+#define MAX_RECORD_SIZE  33554432
+#define MAX_FILESIZE     4294967296
+
+#define RECORD_HEADER_SIZE 8
+
+#define RECORD_VAL 1
+#define RECORD_DEL 2
 
 // Data record
 typedef struct {
-    uint8_t    type;
-    uint8_t    len;
-    uint8_t    seqno;
-    uint8_t    extlen;
-    char       []data;
+    uint8_t     type; // type of record
+    uint32_t    len;  // total size of record
+    uint16_t    seqno; // future journaling stuff
+    uint8_t     extlen; // extra length - key size
+    char        data[]; // data
 } record;
 
 // Location
@@ -29,21 +42,26 @@ typedef union {
 // TODO: Replace with a rbtree to ensure O(logn) and improve fragmentation
 typedef struct _freeloc {
     uint32_t size;
-    _freeloc *next;
+    loc l;
+    struct _freeloc *prev, *next;
 } freeloc;
 
 // Helper methods to operate on free list
+static uint16_t get_sizeslot(uint32_t v) {
+
 static freeloc *freeloc_new(record *r);
 
 static freeloc *freelist_add(freeloc *head, freeloc *n);
 
 static freeloc *freelist_get(freeloc *head, uint32_t size);
 
+static freeloc *freelist_remove(freeloc *head, freeloc *f);
+
 typedef struct {
     uint16_t  version; // Lightkv version
     char      *basepath; // Base db directory path
     void      *filemaps[MAX_NFILES]; // Pointer to file mmaps
-    uint16_t  nfile; // Currently initialized max files
+    uint16_t  nfiles; // Currently initialized max files
     bool      prealloc; // Need pre-file allocation
     loc       start_loc, end_loc; // Location reference to start and current end
     freeloc   *freelist[MAX_SIZES]; // Slab allocation list
@@ -51,18 +69,17 @@ typedef struct {
     bool      has_scanned;
 } lightkv;
 
-// Create a new lightdb
-static lightkv *lightkv_new(char *base, bool prealloc);
+// Create a file with given size and fill zeros
+static int alloc_file(char *filepath, size_t size);
 
-// Open an existing db
-// TODO: implement later
-static lightkv *lightkv_open(char *base, bool prealloc);
+// Memory map an existing file
+static int map_file(void **map, char *filepath);
 
 
 // Public methods
 
 // Initialize db
-lightkv *lightkv_init(char *base, bool prealloc);
+int lightkv_init(lightkv **kv, char *base, bool prealloc);
 
 // Has error occured?
 bool lightkv_has_error(lightkv *kv);
