@@ -50,11 +50,14 @@ freeloc *freelist_remove(freeloc *head, freeloc *f) {
             if (f->next) {
                 f->next->prev = NULL;
             }
-            head = f;
+            head = f->next;
         } else {
             freeloc *tmp;
             tmp = f->next;
-            tmp->prev = f->prev;
+            if (tmp) {
+                tmp->prev = f->prev;
+            }
+
             f->prev->next = tmp;
         }
 
