@@ -3,9 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-
-#include "helper.h"
-#include "errors.h"
+#include <stdlib.h>
 
 #define MAX_NFILES       50
 #define MAX_SIZES        20
@@ -44,18 +42,13 @@ typedef struct _freeloc {
     struct _freeloc *prev, *next;
 } freeloc;
 
-// Helper methods to operate on free list
-static uint32_t roundsize(uint32_t v);
+freeloc *freeloc_new(loc l);
 
-static int get_sizeslot(uint32_t v);
+freeloc *freelist_add(freeloc *head, freeloc *n);
 
-static freeloc *freeloc_new(loc l);
+freeloc *freelist_get(freeloc *head, uint32_t size);
 
-static freeloc *freelist_add(freeloc *head, freeloc *n);
-
-static freeloc *freelist_get(freeloc *head, uint32_t size);
-
-static freeloc *freelist_remove(freeloc *head, freeloc *f);
+freeloc *freelist_remove(freeloc *head, freeloc *f);
 
 typedef struct {
     uint16_t  version; // Lightkv version
@@ -70,11 +63,25 @@ typedef struct {
 } lightkv;
 
 // Create a file with given size and fill zeros
-static int alloc_file(char *filepath, size_t size);
+int alloc_file(char *filepath, size_t size);
 
 // Memory map an existing file
-static int map_file(void **map, char *filepath);
+int map_file(void **map, char *filepath);
 
+// Allocate the next location
+loc create_nextloc(lightkv *kv, uint32_t size);
+
+// Write record into disk
+int write_record(lightkv *kv, loc l, record *rec);
+
+// Read record from a location
+int read_record(lightkv *kv, loc l, record **rec);
+
+// Create a record
+record *create_record(uint8_t type, char *key, char *val, size_t len, size_t recsize);
+
+// Find or create a free loc to store record of given size
+loc find_freeloc(lightkv *kv, size_t size);
 
 // Public methods
 
