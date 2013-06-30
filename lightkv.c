@@ -136,6 +136,7 @@ loc create_nextloc(lightkv *kv, uint32_t size) {
             rm.l.sclass = get_sizeslot(remaining);
             // cannot find a suitable bucket
             // Place an end pointer
+            // FIXME: split remaining into maximum free buckets
             if (get_slotsize(rm.l.sclass) > remaining) {
                 record_header rh;
                 rh.type = RECODE_END;
@@ -360,7 +361,6 @@ bool lightkv_next(lightkv_iter *iter, char **key, char **val, uint32_t *len) {
                 iter->current.l.num++;
                 iter->current.l.offset = 1;
             } else {
-                debug_log("reached nfile limit %d", iter->store->nfiles);
                 return false;
             }
         }
@@ -370,7 +370,6 @@ bool lightkv_next(lightkv_iter *iter, char **key, char **val, uint32_t *len) {
         iter->current.l.sclass = get_sizeslot(rsize);
 
         if (rh.type == RECORD_NULL) {
-            debug_log("current limit =  %d loc "LOCSTR, iter->store->nfiles, LOCPARAMS(iter->current));
             iter->store->has_scanned = true;
             rv = false;
         } else if (rh.type == RECODE_END) {
@@ -433,13 +432,11 @@ main() {
 
         rid = lightkv_insert(kv, st, "hell3", 5);
     }
-    debug_log("Iterating..." ,"");
     lightkv_iter *it = lightkv_iterator(kv);
 
     i = 0;
     while (lightkv_next(it, &k, &v, &l)) {
         i++;
-        debug_log("iter, got %s, %s, %d", k, v, l);
     }
     debug_log("read %d items", i);
 
