@@ -75,6 +75,11 @@ uint32_t roundsize(uint32_t v) {
 }
 
 int get_sizeslot(uint32_t v) {
+    // Check if power of two
+    if (!(v&(v-1))) {
+        v = roundsize(v);
+    }
+
     int n = 0;
     while( v>>=1 ) n++;
     n = n - FIRST_SIZECLASS;
@@ -97,6 +102,7 @@ freeloc *freeloc_new(loc l) {
     f->l = l;
     f->next = NULL;
     f->prev = NULL;
+    return f;
 }
 
 char *get_key(record *r) {

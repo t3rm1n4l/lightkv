@@ -23,6 +23,10 @@ freeloc *freelist_add(freeloc *head, freeloc *n) {
 }
 
 freeloc *freelist_get(freeloc *head, uint32_t size) {
+    if (head == NULL) {
+        return NULL;
+    }
+
     freeloc *f = NULL;
     uint32_t diff;
 
@@ -45,6 +49,10 @@ freeloc *freelist_get(freeloc *head, uint32_t size) {
 }
 
 freeloc *freelist_remove(freeloc *head, freeloc *f) {
+    if (head == NULL) {
+        return NULL;
+    }
+
     if (f) {
         if (f == head) {
             if (f->next) {
@@ -128,17 +136,17 @@ loc create_nextloc(lightkv *kv, uint32_t size) {
         }
         free(f);
         // Put this space to freelist
-        uint32_t remaining = MAX_FILESIZE - kv->end_loc.l.offset;
+        uint32_t remaining = MAX_FILESIZE - (kv->end_loc.l.offset + 1);
         if (remaining >= RECORD_HEADER_SIZE) {
             loc rm;
             rm.l.num = kv->end_loc.l.num;
             rm.l.offset = kv->end_loc.l.offset + 1;
-            rm.l.sclass = get_sizeslot(remaining);
+            rm.l.sclass = get_sizeslot(roundsize(remaining));
             // cannot find a suitable bucket
             // Place an end pointer
             // FIXME: split remaining into maximum free buckets
             if (get_slotsize(rm.l.sclass) > remaining) {
-                record_header rh;
+                record rh;
                 rh.type = RECODE_END;
                 rh.len = remaining;
                 write_record(kv, rm, (record *) &rh);
@@ -174,8 +182,8 @@ int read_record(lightkv *kv, loc l, record **rec) {
     return 0;
 }
 
-record_header read_recheader(lightkv *kv, loc l) {
-    record_header rh;
+record read_recheader(lightkv *kv, loc l) {
+    record rh;
     char *src = kv->filemaps[l.l.num] + l.l.offset;
     memcpy((char *) &rh, src, sizeof(rh));
     return rh;
@@ -191,6 +199,11 @@ int lightkv_init(lightkv **kv, char *base, bool prealloc) {
     (*kv)->basepath = base;
     (*kv)->filemaps[0] = NULL;
     (*kv)->nfiles = 1;
+
+    int i;
+    for (i=0; i <MAX_SIZES; i++) {
+        (*kv)->freelist[i] = NULL;
+    }
 
     char *f = getfilepath(base, 0);
     if (access(f, F_OK ) != -1) {
@@ -356,7 +369,7 @@ bool lightkv_next(lightkv_iter *iter, char **key, char **val, uint32_t *len) {
 
     while (cont) {
         cont = false;
-        if (iter->current.l.offset + sizeof(record_header) >= MAX_FILESIZE) {
+        if (iter->current.l.offset + RECORD_HEADER_SIZE >= MAX_FILESIZE) {
             if (iter->current.l.num + 1 < iter->store->nfiles) {
                 iter->current.l.num++;
                 iter->current.l.offset = 1;
@@ -365,7 +378,7 @@ bool lightkv_next(lightkv_iter *iter, char **key, char **val, uint32_t *len) {
             }
         }
 
-        record_header rh = read_recheader(iter->store, iter->current);
+        record rh = read_recheader(iter->store, iter->current);
         size_t rsize = roundsize(rh.len);
         iter->current.l.sclass = get_sizeslot(rsize);
 
