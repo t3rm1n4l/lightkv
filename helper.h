@@ -21,7 +21,7 @@ char *joinpath(char *base, char *next) {
         l1--;
     }
 
-    s = malloc(l1+l2+2);
+    s = (char *) malloc(l1+l2+2);
     strncpy(s, base, l1);
     strncpy(s+l1+1, next, l2);
     s[l1] = '/';
@@ -98,7 +98,7 @@ uint32_t get_slotsize(int slot) {
 }
 
 freeloc *freeloc_new(loc l) {
-    freeloc *f = malloc(sizeof(freeloc));
+    freeloc *f = (freeloc *) malloc(sizeof(freeloc));
     f->l = l;
     f->next = NULL;
     f->prev = NULL;
@@ -107,7 +107,7 @@ freeloc *freeloc_new(loc l) {
 
 char *get_key(record *r) {
     int l = r->extlen;
-    char *buf = malloc(l+1);
+    char *buf = (char *) malloc(l+1);
     memcpy(buf, (char *) r + RECORD_HEADER_SIZE, l);
     buf[l] = '\0';
     return buf;
@@ -115,7 +115,7 @@ char *get_key(record *r) {
 
 size_t get_val(record *r, char **v) {
     int l = r->len - RECORD_HEADER_SIZE - r->extlen;
-    char *buf = malloc(l);
+    char *buf = (char *) malloc(l);
     memcpy(buf, (char *) r + RECORD_HEADER_SIZE + r->extlen, l);
     *v = buf;
     return l;

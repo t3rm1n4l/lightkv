@@ -166,7 +166,7 @@ loc create_nextloc(lightkv *kv, uint32_t size) {
 int write_record(lightkv *kv, loc l, record *rec) {
     char *dst;
 
-    dst = kv->filemaps[l.l.num] + l.l.offset;
+    dst = (char *) kv->filemaps[l.l.num] + l.l.offset;
     memcpy(dst, rec, rec->len);
 
     return rec->len;
@@ -175,8 +175,8 @@ int write_record(lightkv *kv, loc l, record *rec) {
 int read_record(lightkv *kv, loc l, record **rec) {
     char *src;
     size_t slotsize = get_slotsize(l.l.sclass);
-    *rec = malloc(slotsize);
-    src = kv->filemaps[l.l.num] + l.l.offset;
+    *rec = (record *) malloc(slotsize);
+    src = (char *) kv->filemaps[l.l.num] + l.l.offset;
     memcpy(*rec, src, slotsize);
     print_record(*rec);
 
@@ -185,7 +185,7 @@ int read_record(lightkv *kv, loc l, record **rec) {
 
 record read_recheader(lightkv *kv, loc l) {
     record rh;
-    char *src = kv->filemaps[l.l.num] + l.l.offset;
+    char *src = (char *) kv->filemaps[l.l.num] + l.l.offset;
     memcpy((char *) &rh, src, sizeof(rh));
     return rh;
 }
@@ -193,7 +193,7 @@ record read_recheader(lightkv *kv, loc l) {
 int lightkv_init(lightkv **kv, char *base, bool prealloc) {
     // TODO: Add sanity checks
 
-    *kv = malloc(sizeof(lightkv));
+    *kv = (lightkv *) malloc(sizeof(lightkv));
     assert(*kv > 0);
 
     (*kv)->prealloc = prealloc;
@@ -256,14 +256,14 @@ record *create_record(uint8_t type, char *key, char *val, size_t len, size_t rec
     if (type == RECORD_VAL) {
         int keylen = strlen(key);
         recsize = RECORD_HEADER_SIZE + keylen + len;
-        rec = calloc(recsize, 1);
+        rec = (record *) calloc(recsize, 1);
         rec->type = type;
         rec->len = recsize;
         rec->extlen = keylen;
         memcpy((char *) rec + RECORD_HEADER_SIZE, key, keylen);
         memcpy((char *) rec + RECORD_HEADER_SIZE + keylen, val, len);
     } else if (type == RECORD_DEL) {
-        rec = calloc(recsize, 1);
+        rec = (record *) calloc(recsize, 1);
         rec->type = type;
         rec->len = recsize;
     }
@@ -308,7 +308,8 @@ uint64_t lightkv_insert(lightkv *kv, char *key, char *val, uint32_t len) {
 bool lightkv_get(lightkv *kv, uint64_t recid, char **key, char **val, uint32_t *len) {
     bool rv;
     record *rec;
-    loc l = (loc) recid;
+    loc l;
+    l.val = recid;
     debug_log("Operation:Get, target:"LOCSTR, LOCPARAMS(l));
 
     read_record(kv, l, &rec);
@@ -327,7 +328,8 @@ bool lightkv_get(lightkv *kv, uint64_t recid, char **key, char **val, uint32_t *
 
 bool lightkv_delete(lightkv *kv, uint64_t recid) {
     // TODO: basic sanity
-    loc l = (loc) recid;
+    loc l;
+    l.val = recid;
     debug_log("Operation:Delete, target:"LOCSTR, LOCPARAMS(l));
 
     size_t slotsize = get_slotsize(l.l.sclass);
@@ -340,7 +342,8 @@ bool lightkv_delete(lightkv *kv, uint64_t recid) {
 }
 
 uint64_t lightkv_update(lightkv *kv, uint64_t recid, char *key, char *val, uint32_t len) {
-    loc l = (loc) recid;
+    loc l;
+    l.val = recid;
     debug_log("Operation:Update, target:"LOCSTR" key:%s vallen:%d", LOCPARAMS(l), key, len);
 
     size_t slotsize = get_slotsize(l.l.sclass);
@@ -360,7 +363,7 @@ uint64_t lightkv_update(lightkv *kv, uint64_t recid, char *key, char *val, uint3
 }
 
 lightkv_iter *lightkv_iterator(lightkv *kv) {
-    lightkv_iter *iter = malloc(sizeof(lightkv_iter));
+    lightkv_iter *iter = (lightkv_iter *) malloc(sizeof(lightkv_iter));
     iter->store = kv;
     iter->current = kv->start_loc;
     return iter;
@@ -433,10 +436,10 @@ void lightkv_sync(lightkv *kv) {
 
 main() {
     lightkv *kv;
-    lightkv_init(&kv, "/tmp/", true);
+    lightkv_init(&kv,(char *)  "/tmp/", true);
     uint64_t rid;
     char *k,*v;
-    int l;
+    uint32_t l;
 
     /*
     rid = lightkv_insert(kv, "test_key1", "hello", 5);
@@ -454,10 +457,10 @@ main() {
 
     int i;
     for (i=0; i < 5000; i++) {
-        char *st = calloc(10,1);
+        char *st = (char *) calloc(10,1);
         sprintf(st, "key_%d", i);
 
-        rid = lightkv_insert(kv, st, "hell3", 5);
+        rid = lightkv_insert(kv, st, (char *) "hell3", 5);
     }
     lightkv_iter *it = lightkv_iterator(kv);
 
