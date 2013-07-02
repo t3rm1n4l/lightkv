@@ -12,7 +12,8 @@
 #include "helper.h"
 #include "errors.h"
 #include "logger.h"
-
+#include <unistd.h>
+#include <pthread.h>
 
 freeloc *freelist_add(freeloc *head, freeloc *n) {
     if (head) {
@@ -298,6 +299,7 @@ uint64_t lightkv_insert(lightkv *kv, char *key, char *val, uint32_t len) {
     int rsize = roundsize(rec->len);
     diskloc = find_freeloc(kv, rsize);
     int l = write_record(kv, diskloc, rec);
+    free(rec);
 
     debug_log("Operation:Insert, completed at target:"LOCSTR, LOCPARAMS(diskloc));
     return diskloc.val;
@@ -317,6 +319,7 @@ bool lightkv_get(lightkv *kv, uint64_t recid, char **key, char **val, uint32_t *
 
     *key = get_key(rec);
     *len = get_val(rec, val);
+    free(rec);
 
     debug_log("Operation:Get, fetched %s of vallen:%d", *key, *len);
     return true;
@@ -369,7 +372,7 @@ bool lightkv_next(lightkv_iter *iter, char **key, char **val, uint32_t *len) {
 
     while (cont) {
         cont = false;
-        if (iter->current.l.offset + RECORD_HEADER_SIZE >= MAX_FILESIZE) {
+        if ((uint64_t) iter->current.l.offset + RECORD_HEADER_SIZE >= MAX_FILESIZE) {
             if (iter->current.l.num + 1 < iter->store->nfiles) {
                 iter->current.l.num++;
                 iter->current.l.offset = 1;
@@ -415,6 +418,17 @@ bool lightkv_next(lightkv_iter *iter, char **key, char **val, uint32_t *len) {
     }
 
     return false;
+}
+
+void lightkv_free_iter(lightkv_iter *iter) {
+    free(iter);
+}
+
+void lightkv_sync(lightkv *kv) {
+    int i;
+    for (i=0; i < kv->nfiles; i++) {
+        msync(kv->filemaps[i], MAX_FILESIZE, MS_SYNC);
+    }
 }
 
 main() {

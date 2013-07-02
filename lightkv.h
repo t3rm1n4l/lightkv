@@ -128,5 +128,11 @@ bool lightkv_next(lightkv_iter *iter, char **key, char **val, uint32_t *len);
 // Free iterator
 void lightkv_free_iter(lightkv_iter *iter);
 
+// Fsync
+void lightkv_sync(lightkv *kv);
+
+// Cleanup and close
+void lightkv_close(lightkv *kv);
+
 
 #endif
