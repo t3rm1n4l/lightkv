@@ -76,7 +76,7 @@ freeloc *freelist_remove(freeloc *head, freeloc *f) {
     return head;
 }
 
-int alloc_file(char *filepath, size_t size) {
+int alloc_file(const char *filepath, size_t size) {
     int fd;
     int rv;
 
@@ -94,7 +94,7 @@ int alloc_file(char *filepath, size_t size) {
     return 0;
 }
 
-int map_file(void **map, char *filepath) {
+int map_file(void **map, const char *filepath) {
     int fd;
     struct stat st;
     fd = open(filepath, O_RDWR);
@@ -129,7 +129,7 @@ loc create_nextloc(lightkv *kv, uint32_t size) {
         next.l.offset = 1;
         kv->nfiles++;
 
-        char *f = getfilepath(kv->basepath, next.l.num);
+        char *f = (char *) getfilepath(kv->basepath, next.l.num);
         alloc_file(f, MAX_FILESIZE);
 
         if (map_file(&kv->filemaps[next.l.num], f) < 0) {
@@ -190,7 +190,7 @@ record read_recheader(lightkv *kv, loc l) {
     return rh;
 }
 
-int lightkv_init(lightkv **kv, char *base, bool prealloc) {
+int lightkv_init(lightkv **kv, const char *base, bool prealloc) {
     // TODO: Add sanity checks
 
     *kv = (lightkv *) malloc(sizeof(lightkv));
@@ -250,7 +250,7 @@ int lightkv_init(lightkv **kv, char *base, bool prealloc) {
 }
 
 // Create a VAL or DEL record. Pass recsize = 0 for VAL record.
-record *create_record(uint8_t type, char *key, char *val, size_t len, size_t recsize) {
+record *create_record(uint8_t type, const char *key, const char *val, size_t len, size_t recsize) {
     record *rec = NULL;
 
     if (type == RECORD_VAL) {
@@ -290,15 +290,14 @@ loc find_freeloc(lightkv *kv, size_t size) {
     return l;
 }
 
-uint64_t lightkv_insert(lightkv *kv, char *key, char *val, uint32_t len) {
+uint64_t lightkv_insert(lightkv *kv, const char *key, const char *val, uint32_t len) {
     debug_log("Operation:Insert, key:%s vallen:%d", key, len);
-    size_t size, keylen;
     loc diskloc;
 
     record *rec = create_record(RECORD_VAL, key, val, len, 0);
     int rsize = roundsize(rec->len);
     diskloc = find_freeloc(kv, rsize);
-    int l = write_record(kv, diskloc, rec);
+    write_record(kv, diskloc, rec);
     free(rec);
 
     debug_log("Operation:Insert, completed at target:"LOCSTR, LOCPARAMS(diskloc));
@@ -341,7 +340,7 @@ bool lightkv_delete(lightkv *kv, uint64_t recid) {
     return true;
 }
 
-uint64_t lightkv_update(lightkv *kv, uint64_t recid, char *key, char *val, uint32_t len) {
+uint64_t lightkv_update(lightkv *kv, uint64_t recid, const char *key, const char *val, uint32_t len) {
     loc l;
     l.val = recid;
     debug_log("Operation:Update, target:"LOCSTR" key:%s vallen:%d", LOCPARAMS(l), key, len);
@@ -369,7 +368,7 @@ lightkv_iter *lightkv_iterator(lightkv *kv) {
     return iter;
 }
 
-bool lightkv_next(lightkv_iter *iter, char **key, char **val, uint32_t *len) {
+bool lightkv_next(lightkv_iter *iter, uint64_t *recid, char **key, char **val, uint32_t *len) {
     record *rec;
     bool rv, cont = true;
 
@@ -413,6 +412,8 @@ bool lightkv_next(lightkv_iter *iter, char **key, char **val, uint32_t *len) {
             iter->store->end_loc.l.offset += rsize - 1;
         }
 
+        *recid = iter->current.val;
+
         iter->current.l.offset += rsize;
 
         if (cont) continue;
@@ -432,42 +433,4 @@ void lightkv_sync(lightkv *kv) {
     for (i=0; i < kv->nfiles; i++) {
         msync(kv->filemaps[i], MAX_FILESIZE, MS_SYNC);
     }
-}
-
-main() {
-    lightkv *kv;
-    lightkv_init(&kv,(char *)  "/tmp/", true);
-    uint64_t rid;
-    char *k,*v;
-    uint32_t l;
-
-    /*
-    rid = lightkv_insert(kv, "test_key1", "hello", 5);
-
-    rid = lightkv_insert(kv, "test_key2", "helli", 5);
-    lightkv_delete(kv, rid);
-
-
-
-    lightkv_get(kv, rid, &k, &v, &l);
-
-    rid = lightkv_update(kv, rid, "test_upd", "updat", 5);
-    rid = lightkv_update(kv, rid, "test_update-large", "1234567890", 10);
-    */
-
-    int i;
-    for (i=0; i < 5000; i++) {
-        char *st = (char *) calloc(10,1);
-        sprintf(st, "key_%d", i);
-
-        rid = lightkv_insert(kv, st, (char *) "hell3", 5);
-    }
-    lightkv_iter *it = lightkv_iterator(kv);
-
-    i = 0;
-    while (lightkv_next(it, &k, &v, &l)) {
-        i++;
-    }
-    debug_log("read %d items", i);
-
 }

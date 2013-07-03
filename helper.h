@@ -11,7 +11,7 @@
 #define LOCSTR "%"PRIu64" (%d:%d,%d)"
 #define LOCPARAMS(x) x.val,x.l.num,x.l.offset,x.l.sclass
 
-char *joinpath(char *base, char *next) {
+char *joinpath(const char *base, const char *next) {
     size_t l1,l2;
     char *s;
     l1 = strlen(base);
@@ -30,14 +30,14 @@ char *joinpath(char *base, char *next) {
     return s;
 }
 
-char *getfilepath(char *base, int n) {
+char *getfilepath(const char *base, int n) {
     char name[200];
     // TODO: Fail checks
     snprintf(name, 200, DATAFILE_FORMATSTR, n);
     return joinpath(base, name);
 }
 
-void print_buf(char *buf, int len) {
+void print_buf(const char *buf, int len) {
     int i;
     printf("%p: ", buf);
     for (i=0; i < len; i++) {
@@ -62,7 +62,6 @@ inline void print_record(record *rec) {
 }
 
 uint32_t roundsize(uint32_t v) {
-    uint32_t n;
     // TODO: Add bound checks
     v--;
     v |= v >> 1;
