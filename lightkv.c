@@ -178,7 +178,6 @@ int read_record(lightkv *kv, loc l, record **rec) {
     *rec = (record *) malloc(slotsize);
     src = (char *) kv->filemaps[l.l.num] + l.l.offset;
     memcpy(*rec, src, slotsize);
-    print_record(*rec);
 
     return 0;
 }
@@ -194,7 +193,6 @@ int lightkv_init(lightkv **kv, const char *base, bool prealloc) {
     // TODO: Add sanity checks
 
     *kv = (lightkv *) malloc(sizeof(lightkv));
-    assert(*kv > 0);
 
     (*kv)->prealloc = prealloc;
     (*kv)->basepath = base;

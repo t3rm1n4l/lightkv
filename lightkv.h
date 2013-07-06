@@ -9,7 +9,7 @@
 #define MAX_SIZES        20
 #define FIRST_SIZECLASS  3
 #define MAX_RECORD_SIZE  33554432
-#define MAX_FILESIZE     4294967296
+#define MAX_FILESIZE     1073741824
 
 #define RECORD_HEADER_SIZE 8
 
@@ -30,7 +30,6 @@ typedef struct __attribute__((__packed__)) {
     uint16_t    seqno; // future journaling stuff
     uint32_t    len;  // total size of record
     // header ends
-    char        data[0]; // data
 } record;
 
 // Location

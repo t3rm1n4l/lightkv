@@ -11,6 +11,16 @@
 #define LOCSTR "%"PRIu64" (%d:%d,%d)"
 #define LOCPARAMS(x) x.val,x.l.num,x.l.offset,x.l.sclass
 
+char *joinpath(const char *base, const char *next);
+char *getfilepath(const char *base, int n) ;
+void print_buf(const char *buf, int len) ;
+inline void print_record(record *rec) ;
+uint32_t roundsize(uint32_t v) ;
+size_t get_val(record *r, char **v) ;
+char *get_key(record *r) ;
+int get_sizeslot(uint32_t v) ;
+uint32_t get_slotsize(int slot);
+
 char *joinpath(const char *base, const char *next) {
     size_t l1,l2;
     char *s;
