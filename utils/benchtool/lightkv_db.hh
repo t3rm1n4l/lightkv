@@ -37,7 +37,7 @@ public:
     }
 
     uint64_t Insert(string &key, string &val) {
-        lightkv_insert(kv, key.c_str(), val.c_str(), val.length());
+        return lightkv_insert(kv, key.c_str(), val.c_str(), val.length());
     }
 
     uint64_t Update(uint64_t token, string &key, string &val) {
