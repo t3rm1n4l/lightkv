@@ -1,8 +1,10 @@
+CFLAGS= -g -Wall -D_DEBUG
+
 test: lightkv.o
-	gcc -o test test.c lightkv.o
+	gcc $(CFLAGS) -o test test.c lightkv.o
 
 lightkv.o: lightkv.c
-	gcc -Wall -c lightkv.c
+	gcc $(CFLAGS) -c lightkv.c
 
 clean:
 	rm -f lightkv.o

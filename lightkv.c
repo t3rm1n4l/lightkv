@@ -90,6 +90,7 @@ int alloc_file(const char *filepath, size_t size) {
     if ((rv = write(fd, "",1)) < 0) {
         return rv;
     }
+    close(fd);
 
     return 0;
 }
@@ -129,7 +130,9 @@ loc create_nextloc(lightkv *kv, uint32_t size) {
         next.l.offset = 1;
         kv->nfiles++;
 
+        assert(next.l.num <= MAX_NFILES);
         char *f = (char *) getfilepath(kv->basepath, next.l.num);
+
         alloc_file(f, MAX_FILESIZE);
 
         if (map_file(&kv->filemaps[next.l.num], f) < 0) {
@@ -312,6 +315,7 @@ bool lightkv_get(lightkv *kv, uint64_t recid, char **key, char **val, uint32_t *
     read_record(kv, l, &rec);
     rv = rec->type == RECORD_VAL ? true: false;
     if (rv == false) {
+        free(rec);
         return false;
     }
 
@@ -354,6 +358,7 @@ uint64_t lightkv_update(lightkv *kv, uint64_t recid, const char *key, const char
     }
 
     write_record(kv, l, rec);
+    free(rec);
 
     debug_log("Operation:Update, completed at target:"LOCSTR, LOCPARAMS(l));
     return l.val;
@@ -431,4 +436,22 @@ void lightkv_sync(lightkv *kv) {
     for (i=0; i < kv->nfiles; i++) {
         msync(kv->filemaps[i], MAX_FILESIZE, MS_SYNC);
     }
+}
+
+void lightkv_close(lightkv *kv) {
+    int i;
+
+    for (i=0; i < MAX_SIZES; i++) {
+        freeloc *f = kv->freelist[i];
+        while (f) {
+            free(f);
+            f = freelist_remove(kv->freelist[i], f);
+        }
+    }
+
+    for (i=0; i < kv->nfiles; i++) {
+        munmap(kv->filemaps[i], MAX_FILESIZE);
+    }
+
+    free(kv);
 }

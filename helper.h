@@ -35,7 +35,7 @@ char *joinpath(const char *base, const char *next) {
     strncpy(s, base, l1);
     strncpy(s+l1+1, next, l2);
     s[l1] = '/';
-    s[l1+l2+2] = '\0';
+    s[l1+l2+1] = '\0';
 
     return s;
 }
@@ -103,7 +103,7 @@ int get_sizeslot(uint32_t v) {
 
 uint32_t get_slotsize(int slot) {
     slot += FIRST_SIZECLASS;
-    return pow(2, slot);
+    return 1 << slot;
 }
 
 freeloc *freeloc_new(loc l) {
