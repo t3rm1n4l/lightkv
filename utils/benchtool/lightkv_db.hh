@@ -32,8 +32,13 @@ public:
 class LightKVDB: public BaseDB {
 public:
     lightkv *kv;
+
     LightKVDB(string b) {
         lightkv_init(&kv, b.c_str(), true);
+    }
+
+    ~LightKVDB() {
+        Sync();
     }
 
     uint64_t Insert(string &key, string &val) {

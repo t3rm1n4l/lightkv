@@ -17,13 +17,22 @@ const char *STMT_INSERT =
     "INSERT INTO kv VALUES(?,?);";
 
 const char *STMT_JOURNALMODE =
-    "PRAGMA JOURNAL_MODE=WAL;";
+    "PRAGMA JOURNAL_MODE=DELETE;";
 
 const char *STMT_TRANS_START =
     "BEGIN;";
 
 const char *STMT_TRANS_STOP =
     "COMMIT;";
+
+const char *STMT_UPDATE =
+    "UPDATE kv SET k=?, v=? WHERE rowid=?;";
+
+const char *STMT_GET =
+    "SELECT k,v FROM kv WHERE rowid=?;";
+
+const char *STMT_DELETE =
+    "DELETE FROM kv WHERE rowid=?;";
 
 class SqliteDB: public BaseDB {
 public:
@@ -60,10 +69,38 @@ public:
         return static_cast<uint64_t>(sqlite3_last_insert_rowid(db));
     }
 
+    uint64_t Update(uint64_t token, string &key, string &val) {
+        PreparedStatement p(db, STMT_UPDATE);
+        p.bind(0, key.c_str(), key.length());
+        p.bind_blob(1, val.c_str(), val.length());
+        p.bind64(2, token);
+        p.execute();
+        return static_cast<uint64_t>(sqlite3_last_insert_rowid(db));
+    }
+
+    bool Get(uint64_t token, string &key, string &val) {
+        PreparedStatement p(db, STMT_GET);
+        p.bind64(0, token);
+        if (p.fetch()) {
+            key.assign(p.column(1), p.column_bytes(1));
+            val.assign((char *) p.column_blob(2), p.column_bytes(2));
+            return true;
+        }
+
+        return false;
+    }
+
+    bool Delete(uint64_t token) {
+        PreparedStatement p(db, STMT_DELETE);
+        p.bind64(0, token);
+        if (p.execute()) {
+            return true;
+        }
+
+        return false;
+    }
+
     // TODO(aniraj): Implement all of the following methods
-    uint64_t Update(uint64_t token, string &key, string &val) {return 0; }
-    bool Get(uint64_t token, string &key, string &val) { return true; }
-    bool Delete(uint64_t token) { return true; }
     void Sync() {}
     DBIterator *Iterator() { return NULL; }
 };

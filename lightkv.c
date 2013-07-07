@@ -223,7 +223,7 @@ int lightkv_init(lightkv **kv, const char *base, bool prealloc) {
     *kv = (lightkv *) malloc(sizeof(lightkv));
 
     (*kv)->prealloc = prealloc;
-    (*kv)->basepath = base;
+    (*kv)->basepath = strdup(base);
 #ifdef USE_MMAP
     (*kv)->filemaps[0] = NULL;
 #else
@@ -314,7 +314,6 @@ record *create_record(uint8_t type, const char *key, const char *val, size_t len
 }
 
 loc find_freeloc(lightkv *kv, size_t size) {
-
     loc l;
     int slot = get_sizeslot(size);
 
