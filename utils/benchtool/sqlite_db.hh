@@ -16,9 +16,19 @@ const char *STMT_INIT =
 const char *STMT_INSERT =
     "INSERT INTO kv VALUES(?,?);";
 
+const char *STMT_JOURNALMODE =
+    "PRAGMA JOURNAL_MODE=WAL;";
+
+const char *STMT_TRANS_START =
+    "BEGIN;";
+
+const char *STMT_TRANS_STOP =
+    "COMMIT;";
+
 class SqliteDB: public BaseDB {
 public:
     sqlite3 *db;
+    bool intransaction;
 
     SqliteDB(string f) {
         int flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE;
@@ -26,6 +36,20 @@ public:
 
         PreparedStatement p(db, STMT_INIT);
         p.execute();
+
+        PreparedStatement pj(db, STMT_JOURNALMODE);
+        pj.execute();
+
+        PreparedStatement bt(db, STMT_TRANS_START);
+        bt.execute();
+        intransaction = true;
+    }
+
+    ~SqliteDB() {
+        if (intransaction) {
+            PreparedStatement et(db, STMT_TRANS_STOP);
+            et.execute();
+        }
     }
 
     uint64_t Insert(string &key, string &val) {

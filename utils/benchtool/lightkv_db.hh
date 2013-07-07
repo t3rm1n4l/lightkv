@@ -2,7 +2,7 @@
 #define LIGHTKV_DB_HH 1
 
 #include "interface.hh"
-#include "lightkv.h"
+#include "../../lightkv.h"
 #include <iostream>
 #include <stdint.h>
 

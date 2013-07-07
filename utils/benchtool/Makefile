@@ -1,12 +1,12 @@
 LIGHTDB_SRC=../../
 SQLITE_SRC=third_party/sqlite3
-FLAGS = -Wall
+FLAGS = -g -Wall -I$(SQLITE_SRC) -I$(LIGHTDB_SRC)
 
 build: lightkv.o driver.o
-	g++ $(FLAGS) -o driver lightkv.o driver.o sqlite3.o sqlite-objects.o
+	g++ $(FLAGS) -pthread -o driver lightkv.o driver.o sqlite3.o sqlite-objects.o -ldl
 
 driver.o: lightkv.o sqlite-objects.o sqlite3.o
-	g++ $(FLAGS) -Wall -c driver.cc -I$(LIGHTDB_SRC)
+	g++ $(FLAGS) -Wall -c driver.cc
 
 lightkv.o: $(LIGHTDB_SRC)/lightkv.c $(LIGHTDB_SRC)/lightkv.h
 	gcc $(FLAGS) -c $<

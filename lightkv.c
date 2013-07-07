@@ -264,9 +264,9 @@ int lightkv_init(lightkv **kv, const char *base, bool prealloc) {
         }
     } else {
         (*kv)->has_scanned = true;
-        alloc_file(f, MAX_FILESIZE);
 
 #ifdef USE_MMAP
+        alloc_file(f, MAX_FILESIZE);
         if (map_file(&(*kv)->filemaps[0], f) < 0) {
             assert(false);
         }
