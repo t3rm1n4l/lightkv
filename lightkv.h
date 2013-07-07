@@ -18,6 +18,9 @@
 #define RECORD_DEL  2
 #define RECODE_END  3
 
+// Use mmaping
+//#define USE_MMAP 1
+
 #ifdef  __cplusplus
 extern "C" {
 #endif
@@ -60,7 +63,11 @@ freeloc *freelist_remove(freeloc *head, freeloc *f);
 typedef struct {
     uint16_t    version; // Lightkv version
     const char  *basepath; // Base db directory path
+#ifdef USE_MMAP
     void        *filemaps[MAX_NFILES]; // Pointer to file mmaps
+#else
+    int         fds[MAX_SIZES];
+#endif
     uint16_t    nfiles; // Currently initialized max files
     bool        prealloc; // Need pre-file allocation
     loc         start_loc, end_loc; // Location reference to start and current end

@@ -118,6 +118,10 @@ int map_file(void **map, const char *filepath) {
     return 0;
 }
 
+int init_file(int *fd, const char *filepath) {
+    *fd = open(filepath, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    return 0;
+}
 
 loc create_nextloc(lightkv *kv, uint32_t size) {
     loc next = kv->end_loc;
@@ -133,11 +137,17 @@ loc create_nextloc(lightkv *kv, uint32_t size) {
         assert(next.l.num <= MAX_NFILES);
         char *f = (char *) getfilepath(kv->basepath, next.l.num);
 
+#ifdef USE_MMAP
         alloc_file(f, MAX_FILESIZE);
 
         if (map_file(&kv->filemaps[next.l.num], f) < 0) {
             assert(false);
         }
+#else
+        if (init_file(&kv->fds[next.l.num], f) < 0) {
+            assert(false);
+        }
+#endif
         free(f);
         // Put this space to freelist
         uint32_t remaining = MAX_FILESIZE - (kv->end_loc.l.offset + 1);
@@ -167,28 +177,43 @@ loc create_nextloc(lightkv *kv, uint32_t size) {
 }
 
 int write_record(lightkv *kv, loc l, record *rec) {
+#ifdef USE_MMAP
     char *dst;
-
     dst = (char *) kv->filemaps[l.l.num] + l.l.offset;
     memcpy(dst, rec, rec->len);
+#else
+    lseek(kv->fds[l.l.num], l.l.offset, SEEK_SET);
+    write(kv->fds[l.l.num], rec, rec->len);
+#endif
 
     return rec->len;
 }
 
 int read_record(lightkv *kv, loc l, record **rec) {
-    char *src;
     size_t slotsize = get_slotsize(l.l.sclass);
     *rec = (record *) malloc(slotsize);
+#ifdef USE_MMAP
+    char *src;
     src = (char *) kv->filemaps[l.l.num] + l.l.offset;
     memcpy(*rec, src, slotsize);
+#else
+    lseek(kv->fds[l.l.num], l.l.offset, SEEK_SET);
+    read(kv->fds[l.l.num], (char *) *rec, slotsize);
+#endif
 
     return 0;
 }
 
 record read_recheader(lightkv *kv, loc l) {
     record rh;
+#ifdef USE_MMAP
     char *src = (char *) kv->filemaps[l.l.num] + l.l.offset;
     memcpy((char *) &rh, src, sizeof(rh));
+#else
+    lseek(kv->fds[l.l.num], l.l.offset, SEEK_SET);
+    read(kv->fds[l.l.num], (char *) &rh, sizeof(rh));
+#endif
+
     return rh;
 }
 
@@ -199,7 +224,11 @@ int lightkv_init(lightkv **kv, const char *base, bool prealloc) {
 
     (*kv)->prealloc = prealloc;
     (*kv)->basepath = base;
+#ifdef USE_MMAP
     (*kv)->filemaps[0] = NULL;
+#else
+    (*kv)->fds[0] = -1;
+#endif
     (*kv)->nfiles = 1;
 
     int i;
@@ -216,9 +245,15 @@ int lightkv_init(lightkv **kv, const char *base, bool prealloc) {
         while (1) {
             fn = getfilepath(base, num);
             if (access(fn, F_OK|R_OK|W_OK) != -1) {
+#ifdef USE_MMAP
                 if (map_file(&(*kv)->filemaps[num], fn) < 0) {
                     assert(false);
                 }
+#else
+                if (init_file(&(*kv)->fds[num], fn) < 0) {
+                    assert(false);
+                }
+#endif
                 num++;
                 (*kv)->nfiles = num;
                 free(fn);
@@ -231,9 +266,15 @@ int lightkv_init(lightkv **kv, const char *base, bool prealloc) {
         (*kv)->has_scanned = true;
         alloc_file(f, MAX_FILESIZE);
 
+#ifdef USE_MMAP
         if (map_file(&(*kv)->filemaps[0], f) < 0) {
             assert(false);
         }
+#else
+        if (init_file(&(*kv)->fds[0], f) < 0) {
+            assert(false);
+        }
+#endif
     }
 
     free(f);
@@ -434,7 +475,11 @@ void lightkv_free_iter(lightkv_iter *iter) {
 void lightkv_sync(lightkv *kv) {
     int i;
     for (i=0; i < kv->nfiles; i++) {
+#ifdef USE_MMAP
         msync(kv->filemaps[i], MAX_FILESIZE, MS_SYNC);
+#else
+        fsync(kv->fds[i]);
+#endif
     }
 }
 
@@ -450,7 +495,11 @@ void lightkv_close(lightkv *kv) {
     }
 
     for (i=0; i < kv->nfiles; i++) {
+#ifdef USE_MMAP
         munmap(kv->filemaps[i], MAX_FILESIZE);
+#else
+        close(kv->fds[i]);
+#endif
     }
 
     free(kv);
