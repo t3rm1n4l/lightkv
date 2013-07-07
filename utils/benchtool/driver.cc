@@ -4,6 +4,10 @@
 #include "timing.hh"
 #include <unistd.h>
 
+#include <vector>
+
+using namespace std;
+
 int main(int argc, char **argv) {
     std::string dbtype("sqlite");
     BaseDB *db;
@@ -22,18 +26,46 @@ int main(int argc, char **argv) {
     if (dbtype == "lightkv") {
         db = new LightKVDB("/tmp/");
     } else {
-        db = new SqliteDB("/tmp/test.sqlite");
+        db = new SqliteDB("/tmp/data.sqlite");
     }
 
     int i;
+    vector<uint64_t> rids;
     std::string val("value..........");
     {
-        Timing t("insert of 50000");
-        for (i=0; i< 50000; i++) {
+        Timing t("insert of 5000000");
+        for (i=0; i< 5000000; i++) {
             stringstream ss;
             ss<<"key_"<<i;
             std::string k = ss.str();
-            db->Insert(k, val);
+            rids.push_back(db->Insert(k, val));
+        }
+    }
+
+    {
+        val = "newvalue";
+        Timing t("update of 5000000");
+        for (i=0; i< 5000000; i++) {
+            stringstream ss;
+            ss<<"key_"<<i;
+            std::string k = ss.str();
+            db->Update(rids.at(i), k, val);
+        }
+    }
+
+    {
+        Timing t("Get of 5000000");
+        for (i=0; i< 5000000; i++) {
+            string k,v;
+            db->Get(rids.at(i), k, v);
+        }
+    }
+
+    {
+        Timing t("Delete of 5000000");
+        for (i=0; i< 5000000; i++) {
+            string k,v;
+            db->Delete(rids.at(i));
         }
     }
 
